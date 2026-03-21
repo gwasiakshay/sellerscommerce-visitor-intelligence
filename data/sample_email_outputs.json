@@ -1,0 +1,88 @@
+{
+  "description": "Sample personalised email outputs from the FastAPI microservice for 3 visitor personas. Shows what the LLM generates vs the static fallback.",
+  "generated": "March 2026",
+
+  "outputs": [
+
+    {
+      "visitor_id": "sample_001",
+      "persona": "Enterprise — VP Operations, Industrial Distributor, Return Visit",
+      "routing": "Enterprise tier → Slack alert to sales rep (no auto-email)",
+      "email_generated_for": "Sales rep context — rep sends this manually",
+      "llm_output": {
+        "subject_line": "How GlobalParts could unify its dealer network, Sarah",
+        "opening_paragraph": "I noticed GlobalParts has been evaluating our Enterprise plan — and came back for a second look. Companies managing dealer networks at your scale typically find the Dealer Portal module cuts onboarding time significantly, especially when field reps are accessing the system across different regions.",
+        "cta_line": "Would a 20-minute walkthrough be useful this week? https://calendly.com/sellerscommerce/demo?utm_source=pricing-workflow&utm_tier=enterprise&utm_visit=return",
+        "fallback_used": false,
+        "model_used": "anthropic/claude-haiku-4-5",
+        "generated_at": "2026-03-21T10:30:00Z"
+      }
+    },
+
+    {
+      "visitor_id": "sample_002",
+      "persona": "Mid-Market — Head of E-commerce, Fashion Brand, First Visit",
+      "routing": "Mid-Market tier → AI-personalised email sent immediately",
+      "full_email": {
+        "to": "r.mehta@trendcraft.in",
+        "subject": "Trendcraft's catalogue management — worth a look, Rahul",
+        "body": "Hi Rahul,\n\nI saw Trendcraft was exploring our Growth plan earlier — specifically the features around catalogue and inventory management. Fashion brands at your stage typically get the most immediate value from the variant management and bulk upload capabilities, especially when SKU counts are growing faster than the team.\n\nWould a 20-minute walkthrough be useful this week? https://calendly.com/sellerscommerce/demo?utm_source=pricing-workflow&utm_tier=growth&utm_visit=first\n\nBest,\n[Sales Rep Name]\nSellersCommerce",
+        "utm_tags": {
+          "source": "pricing-workflow",
+          "tier": "growth",
+          "visit": "first",
+          "trigger": "roi-calculator"
+        }
+      },
+      "llm_output": {
+        "subject_line": "Trendcraft's catalogue management — worth a look, Rahul",
+        "opening_paragraph": "I saw Trendcraft was exploring our Growth plan earlier — specifically the features around catalogue and inventory management. Fashion brands at your stage typically get the most immediate value from the variant management and bulk upload capabilities, especially when SKU counts are growing faster than the team.",
+        "cta_line": "Would a 20-minute walkthrough be useful this week? https://calendly.com/sellerscommerce/demo?utm_source=pricing-workflow&utm_tier=growth&utm_visit=first",
+        "fallback_used": false,
+        "model_used": "anthropic/claude-haiku-4-5",
+        "generated_at": "2026-03-21T10:31:00Z"
+      }
+    },
+
+    {
+      "visitor_id": "sample_003",
+      "persona": "Mid-Market — CTO, E-commerce Tech Company, Third Visit",
+      "routing": "Mid-Market tier → AI-personalised email sent immediately",
+      "full_email": {
+        "to": "p.sharma@nexcart.io",
+        "subject": "NexCart's third look at our Pro plan, Priya",
+        "body": "Hi Priya,\n\nNexCart has come back to our Pro plan three times now — that usually means you're evaluating something specific rather than just browsing. Given your stack (you're clearly API-forward), the headless commerce architecture and the way our CommerceEDGE layer exposes workflow automation via API might be worth 20 minutes of your time.\n\nWould a focused technical walkthrough this week work? https://calendly.com/sellerscommerce/demo?utm_source=pricing-workflow&utm_tier=pro&utm_visit=return\n\nBest,\n[Sales Rep Name]\nSellersCommerce",
+        "utm_tags": {
+          "source": "pricing-workflow",
+          "tier": "pro",
+          "visit": "return",
+          "trigger": "return-intensity"
+        }
+      },
+      "llm_output": {
+        "subject_line": "NexCart's third look at our Pro plan, Priya",
+        "opening_paragraph": "NexCart has come back to our Pro plan three times now — that usually means you're evaluating something specific rather than just browsing. Given your stack, the headless commerce architecture and the way our CommerceEDGE layer exposes workflow automation via API might be exactly what you're assessing.",
+        "cta_line": "Would a focused technical walkthrough this week work? https://calendly.com/sellerscommerce/demo?utm_source=pricing-workflow&utm_tier=pro&utm_visit=return",
+        "fallback_used": false,
+        "model_used": "anthropic/claude-haiku-4-5",
+        "generated_at": "2026-03-21T10:32:00Z"
+      }
+    },
+
+    {
+      "visitor_id": "sample_fallback_demo",
+      "persona": "Mid-Market — LLM failure scenario — fallback template used",
+      "routing": "Mid-Market tier → email sent using static fallback",
+      "note": "Demonstrates that the workflow never breaks even when LLM fails. Email still sends.",
+      "llm_output": {
+        "subject_line": "Trendcraft Apparel + SellersCommerce — worth 20 minutes?",
+        "opening_paragraph": "I saw Trendcraft Apparel was exploring our Growth plan earlier. Based on your industry, the variant management and bulk catalogue upload features tend to be where companies like yours find the most immediate value.",
+        "cta_line": "Would a 20-minute walkthrough be useful this week? https://calendly.com/sellerscommerce/demo?utm_source=pricing-workflow&utm_tier=growth&utm_visit=first",
+        "fallback_used": true,
+        "model_used": null,
+        "generated_at": "2026-03-21T10:33:00Z"
+      }
+    }
+
+  ]
+}

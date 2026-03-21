@@ -1,0 +1,198 @@
+{
+  "description": "Sample enriched visitor objects — output of n8n after Clearbit Reveal + Apollo.io + Clearbit Enrichment pipeline. These are the objects passed to the FastAPI personalisation microservice.",
+  "generated": "March 2026",
+  "note": "All company names and contact details are fictional mock data for demonstration purposes.",
+
+  "visitors": [
+
+    {
+      "id": "sample_001",
+      "tier": "Enterprise",
+      "trigger": "The Comparison Deep-Dive",
+      "enrichment_stages": {
+        "clearbit_reveal": {
+          "ip_address": "203.0.113.45",
+          "company_name": "GlobalParts Inc.",
+          "company_domain": "globalparts.com",
+          "industry": "Industrial Distribution",
+          "employee_count": 420,
+          "confidence_score": 0.94
+        },
+        "apollo_contact": {
+          "first_name": "Sarah",
+          "last_name": "Chen",
+          "job_title": "VP Operations",
+          "email": "s.chen@globalparts.com",
+          "linkedin_url": "https://linkedin.com/in/sarah-chen-example",
+          "seniority": "vp",
+          "department": "operations"
+        },
+        "clearbit_enrichment": {
+          "title_seniority": "vp",
+          "company_funding_stage": "private",
+          "company_tech_stack": ["SAP", "Salesforce"],
+          "company_size_band": "Enterprise"
+        }
+      },
+      "assembled_object": {
+        "first_name": "Sarah",
+        "company_name": "GlobalParts Inc.",
+        "job_title": "VP Operations",
+        "industry": "Industrial Distribution",
+        "company_size_band": "Enterprise",
+        "pricing_tier_clicked": "Enterprise",
+        "trigger_type": "The Comparison Deep-Dive",
+        "visit_count": 2,
+        "visit_type": "return",
+        "hero_feature": "Dealer Portal management",
+        "calendly_link": "https://calendly.com/sellerscommerce/demo?utm_source=pricing-workflow&utm_tier=enterprise&utm_visit=return"
+      }
+    },
+
+    {
+      "id": "sample_002",
+      "tier": "Mid-Market",
+      "trigger": "The ROI Calculator Interaction",
+      "enrichment_stages": {
+        "clearbit_reveal": {
+          "ip_address": "198.51.100.22",
+          "company_name": "Trendcraft Apparel",
+          "company_domain": "trendcraft.in",
+          "industry": "Fashion & Apparel",
+          "employee_count": 87,
+          "confidence_score": 0.89
+        },
+        "apollo_contact": {
+          "first_name": "Rahul",
+          "last_name": "Mehta",
+          "job_title": "Head of E-commerce",
+          "email": "r.mehta@trendcraft.in",
+          "linkedin_url": null,
+          "seniority": "manager",
+          "department": "ecommerce"
+        },
+        "clearbit_enrichment": {
+          "title_seniority": "manager",
+          "company_funding_stage": "seed",
+          "company_tech_stack": ["Shopify", "Klaviyo"],
+          "company_size_band": "Mid-Market"
+        }
+      },
+      "assembled_object": {
+        "first_name": "Rahul",
+        "company_name": "Trendcraft Apparel",
+        "job_title": "Head of E-commerce",
+        "industry": "Fashion & Apparel",
+        "company_size_band": "Mid-Market",
+        "pricing_tier_clicked": "Growth",
+        "trigger_type": "The ROI Calculator Interaction",
+        "visit_count": 1,
+        "visit_type": "first",
+        "hero_feature": "variant management and bulk catalogue upload",
+        "calendly_link": "https://calendly.com/sellerscommerce/demo?utm_source=pricing-workflow&utm_tier=growth&utm_visit=first"
+      }
+    },
+
+    {
+      "id": "sample_003",
+      "tier": "Mid-Market",
+      "trigger": "The Return Intensity",
+      "enrichment_stages": {
+        "clearbit_reveal": {
+          "ip_address": "192.0.2.88",
+          "company_name": "NexCart Technologies",
+          "company_domain": "nexcart.io",
+          "industry": "E-commerce Technology",
+          "employee_count": 134,
+          "confidence_score": 0.91
+        },
+        "apollo_contact": {
+          "first_name": "Priya",
+          "last_name": "Sharma",
+          "job_title": "CTO",
+          "email": "p.sharma@nexcart.io",
+          "linkedin_url": "https://linkedin.com/in/priya-sharma-example",
+          "seniority": "c_suite",
+          "department": "engineering"
+        },
+        "clearbit_enrichment": {
+          "title_seniority": "c_suite",
+          "company_funding_stage": "series_a",
+          "company_tech_stack": ["AWS", "React", "Node.js"],
+          "company_size_band": "Mid-Market"
+        }
+      },
+      "assembled_object": {
+        "first_name": "Priya",
+        "company_name": "NexCart Technologies",
+        "job_title": "CTO",
+        "industry": "E-commerce Technology",
+        "company_size_band": "Mid-Market",
+        "pricing_tier_clicked": "Pro",
+        "trigger_type": "The Return Intensity",
+        "visit_count": 3,
+        "visit_type": "return",
+        "hero_feature": "headless commerce and API-first architecture",
+        "calendly_link": "https://calendly.com/sellerscommerce/demo?utm_source=pricing-workflow&utm_tier=pro&utm_visit=return"
+      }
+    },
+
+    {
+      "id": "sample_004_sme_blocked",
+      "tier": "SME",
+      "trigger": "The Competitive Scroll",
+      "note": "SME visitor — workflow EXITS after tier classification. No email sent. Domain reputation protected.",
+      "enrichment_stages": {
+        "clearbit_reveal": {
+          "ip_address": "10.0.0.157",
+          "company_name": "LocalBuy Store",
+          "company_domain": "localbuy.in",
+          "industry": "Retail",
+          "employee_count": 12,
+          "confidence_score": 0.82
+        },
+        "apollo_contact": {
+          "first_name": "Amit",
+          "last_name": "Patel",
+          "job_title": "Founder",
+          "email": "amit@localbuy.in",
+          "seniority": "c_suite",
+          "department": "executive"
+        }
+      },
+      "assembled_object": {
+        "first_name": "Amit",
+        "company_name": "LocalBuy Store",
+        "job_title": "Founder",
+        "industry": "Retail",
+        "company_size_band": "SME",
+        "pricing_tier_clicked": "Growth",
+        "trigger_type": "The Competitive Scroll",
+        "visit_count": 1,
+        "visit_type": "first",
+        "routing_outcome": "LOG_ONLY — SME hard block applied"
+      }
+    },
+
+    {
+      "id": "sample_005_low_confidence_exit",
+      "tier": "Unknown",
+      "trigger": "The Exit Recapture",
+      "note": "Clearbit confidence below 80% threshold — workflow EXITS and routes to human review queue.",
+      "enrichment_stages": {
+        "clearbit_reveal": {
+          "ip_address": "172.16.0.99",
+          "company_name": null,
+          "company_domain": null,
+          "industry": null,
+          "employee_count": null,
+          "confidence_score": 0.61
+        }
+      },
+      "assembled_object": {
+        "routing_outcome": "HUMAN_REVIEW — Clearbit confidence 0.61 below threshold of 0.80"
+      }
+    }
+
+  ]
+}

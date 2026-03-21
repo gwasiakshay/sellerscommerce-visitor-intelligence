@@ -1,7 +1,7 @@
 # SellersCommerce — Visitor Intelligence & Automated Outreach System
 
 **Founder's Office Take-Home Assignment · March 2026**  
-**Designed by:** Akshay Gwasikoti · [ak.gwasi@gmail.com](mailto:ak.gwasi@gmail.com) · [github.com/gwasiakshay](https://github.com/gwasiakshay)
+**Designed & Built by:** Akshay Gwasikoti · [ak.gwasi@gmail.com](mailto:ak.gwasi@gmail.com) · [github.com/gwasiakshay](https://github.com/gwasiakshay)
 
 ---
 
@@ -11,30 +11,30 @@ Most B2B SaaS companies lose 95%+ of their pricing page visitors without ever kn
 
 SellersCommerce's pricing page attracts high-intent buyers — but anonymous traffic means no follow-up, no context, and no meeting booked. A visitor who spent 4 minutes comparing the Growth and Enterprise plans is a warm lead. Without a system, they disappear.
 
-**This workflow turns anonymous pricing page intent into booked meetings — automatically, and without ever looking spammy.**
+**This system turns anonymous pricing page intent into booked meetings — automatically, without looking spammy, and without a human in the loop until a meeting is confirmed.**
 
 ---
 
-## What This System Does
+## How It Works
 
 ```
 Visitor lands on pricing page
         ↓
-High-intent behaviour detected (time on page, plan hover, return visit)
+High-intent behaviour detected (named trigger fires)
         ↓
-Corporate IP → company identity resolved (Clearbit)
+Corporate IP → company identity resolved (Clearbit Reveal)
         ↓
-Decision-maker contact found (Apollo)
+Decision-maker contact found (Apollo.io)
         ↓
 CRM guardrails checked (HubSpot) — existing customer? Recent outreach? Opted out?
         ↓
 Tier-based routing: Enterprise / Mid-Market / SME
         ↓
-LLM generates personalised email (FastAPI microservice)
+LLM generates personalised email (FastAPI microservice + OpenRouter)
         ↓
 Email sent via SendGrid with pre-tagged Calendly link
         ↓
-All activity logged (Google Sheets / PostgreSQL at scale)
+All activity logged (Google Sheets audit log)
 ```
 
 ---
@@ -43,7 +43,7 @@ All activity logged (Google Sheets / PostgreSQL at scale)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     Pricing Page (JS Pixel)                  │
+│                  Pricing Page (JS Pixel via GTM)             │
 │         Behaviour tracking → Webhook fires to n8n            │
 └──────────────────────────┬──────────────────────────────────┘
                            │
@@ -53,26 +53,29 @@ All activity logged (Google Sheets / PostgreSQL at scale)
 │  ┌─────────────┐   ┌──────────────┐   ┌───────────────────┐ │
 │  │   Trigger   │   │  Enrichment  │   │  CRM Guardrails   │ │
 │  │   Filter    │──▶│  Pipeline    │──▶│  (HubSpot check)  │ │
-│  │  (IF nodes) │   │Clearbit→     │   │  Suppression list │ │
-│  └─────────────┘   │Apollo→Score  │   └────────┬──────────┘ │
-│                    └──────────────┘            │             │
-│                                                ▼             │
+│  │  (IF nodes) │   │Clearbit →    │   │  Suppression      │ │
+│  └─────────────┘   │Apollo →      │   └────────┬──────────┘ │
+│                    │Assemble      │            │             │
+│                    └──────────────┘            ▼             │
 │                    ┌───────────────────────────────────────┐ │
 │                    │         Tier-Based Router              │ │
-│                    │  Enterprise / Mid-Market / SME / Exit  │ │
-│                    └──────────┬──────────────┬─────────────┘ │
-└───────────────────────────────┼──────────────┼───────────────┘
-                                │              │
-             ┌──────────────────▼──┐    ┌──────▼─────────────┐
-             │  FastAPI (LLM Layer) │    │   Audit Log        │
-             │  Personalisation    │    │   Google Sheets /  │
-             │  Microservice       │    │   PostgreSQL        │
-             └──────────┬──────────┘    └────────────────────┘
-                        │
-             ┌──────────▼──────────┐
-             │  SendGrid           │
-             │  (Email Delivery)   │
-             └─────────────────────┘
+│                    │  Enterprise / Mid-Market / SME         │ │
+│                    └──────┬──────────────┬─────────────────┘ │
+└───────────────────────────┼──────────────┼───────────────────┘
+               Slack Alert  │              │ FastAPI Call
+          (sales rep)       │              │
+             ┌──────────────▼──┐    ┌──────▼─────────────────┐
+             │  Enterprise     │    │  FastAPI + OpenRouter   │
+             │  Human Handoff  │    │  Personalisation Agent  │
+             └─────────────────┘    └──────────┬──────────────┘
+                                               │
+                                    ┌──────────▼──────────────┐
+                                    │  SendGrid Email Delivery │
+                                    └──────────┬──────────────┘
+                                               │
+                                    ┌──────────▼──────────────┐
+                                    │  Google Sheets Audit Log │
+                                    └─────────────────────────┘
 ```
 
 ---
@@ -81,173 +84,71 @@ All activity logged (Google Sheets / PostgreSQL at scale)
 
 | Layer | Tool | Why |
 |-------|------|-----|
+| Visitor Tracking | Custom JS Pixel via GTM | Fires structured JSON events on named trigger conditions — no site code changes needed |
 | Orchestration | **n8n** | All logic in one inspectable, debuggable workflow — no code deploys to change behaviour |
-| Identity Resolution | **Clearbit Reveal** | Corporate IP → company name, industry, size |
-| Contact Enrichment | **Apollo.io** | Company → decision-maker name, title, email |
-| CRM & Suppression | **HubSpot** | Existing customer check, 30-day suppression, opt-out compliance |
-| AI Personalisation | **FastAPI + OpenRouter LLM** | Structured context → personalised email copy, cached per profile hash |
-| Email Delivery | **SendGrid** | Deliverability controls, daily send cap, domain warm-up |
-| Audit & Logging | **Google Sheets → PostgreSQL** | Append-only execution log; one-node swap to Postgres at scale |
+| IP Resolution | **Clearbit Reveal** | Corporate IP → company name, industry, size. First identity signal before any form fill |
+| Contact Discovery | **Apollo.io** | Company domain → ICP-matching decision-maker with verified email |
+| Full Enrichment | **Clearbit Enrichment** | Email → full firmographic profile, title seniority, tech stack signals |
+| CRM & Suppression | **HubSpot** | Existing customer check, 30-day suppression, opt-out compliance, lifecycle tracking |
+| AI Personalisation | **FastAPI + OpenRouter LLM** | Structured context → personalised subject line + email opening, cached per profile hash |
+| Email Delivery | **SendGrid** | Deliverability controls, daily send cap, domain warm-up, open/click webhooks |
+| Audit & Logging | **Google Sheets → PostgreSQL** | Append-only execution log. One-node swap to Postgres at 10K+ monthly visits |
+| Error Alerting | **Slack Webhook** | Ops channel alert on any API failure or execution error |
 
 ---
 
-## Section 1 — Trigger & Behaviour Logic: Defining High Intent
+## The 5 Named High-Intent Triggers
 
-The workflow does **not** fire on every page visit. It activates only when a visitor's behaviour pattern signals genuine purchase evaluation.
+Each trigger has a name — because naming a signal forces precision about what it actually means.
 
-### Named High-Intent Triggers
+| Trigger | Signal | Threshold |
+|---------|--------|-----------|
+| **The Comparison Deep-Dive** | Extended time on pricing tier comparison section | >45s on comparison AND scroll ≥60% |
+| **The Return Intensity** | Same corporate IP returns to pricing page | visit_count ≥2 within 48 hours |
+| **The ROI Calculator Interaction** | Any input event on calculator elements | Fires immediately on interaction |
+| **The Competitive Scroll** | Dwell on SellersCommerce vs. Competitors section | Scroll ≥75% AND dwell ≥20s |
+| **The Exit Recapture** | Exit intent after significant engagement | Exit intent AND time_on_page ≥30s AND scroll ≥50% |
 
-| Trigger Name | Definition |
-|---|---|
-| **The Evaluator** | 3+ minutes on pricing page in a single session |
-| **The Comparer** | Hovered or clicked 2+ pricing plan cards |
-| **The Returner** | Second visit to pricing page within 7 days |
-| **The Deep Diver** | Pricing page + Feature comparison page in same session |
-
-### What Does NOT Trigger the Workflow
-
-- **Internal traffic** — IP exclusion list maintained as environment variable in n8n
-- **Bot/crawler traffic** — user-agent filtering at pixel level, before webhook fires
-- **Existing customers** — CRM guardrail check exits the workflow before any action
-- **Recent outreach contacts** — global 30-day suppression check
-- **Mobile visitors < 30 seconds** — too low signal strength to justify enrichment API cost
-
-> **Design rationale:** Naming each trigger forces precision about what the signal actually means. "3 minutes on pricing" is not the same as "evaluated two plans." Each has a different implication for how the outreach should read.
+**What does NOT trigger the workflow:**
+- Internal traffic (IP exclusion list)
+- Bot/crawler traffic (user-agent filter at pixel level)
+- Existing customers (HubSpot guardrail — checked before any enrichment)
+- Contacts outreached in last 30 days (global suppression)
+- Mobile visitors under 30 seconds (too low signal strength)
 
 ---
 
-## Section 2 — The B2B Intelligence Pipeline
+## The Three-Tier Routing
 
-Anonymous traffic is not a dead end. A corporate IP carries enough signal to identify the company, find the right person inside it, and build a personalisation context — all before the visitor has filled in a single form field.
+| Tier | Condition | Action |
+|------|-----------|--------|
+| **Enterprise** | >200 employees OR C-suite/VP title | Slack alert to sales rep — no automated email |
+| **Mid-Market** | 50–200 employees AND ICP title matched | AI-personalised email sent immediately |
+| **SME** | <50 employees | Logged only — never emailed |
 
-### Four-Stage Identity & Intelligence Pipeline
-
-```
-Stage 1: IP Resolution
-  Pixel captures: IP, pages visited, time on page, plan interactions, session data
-  Clearbit Reveal: IP → company name, domain, industry, employee count, location
-  
-Stage 2: Contact Discovery  
-  Apollo.io: company domain → decision-maker (VP Sales / Head of Ecommerce / Founder)
-  Filters: seniority ≥ Manager, department = Sales/Operations/Product
-  
-Stage 3: Profile Assembly
-  n8n merges: visitor behaviour + company intel + contact details
-  Output: structured JSON object passed to LLM layer
-  
-Stage 4: Tier Classification
-  Enterprise: 200+ employees → immediate personalised outreach
-  Mid-Market: 50–200 employees → personalised outreach with slight delay
-  SME: < 50 employees → logged only, never emailed (protects sender reputation)
-```
+**Why Enterprise gets Slack, not email:** An automated email to a VP at a 500-person company signals low effort. A personal follow-up from a sales rep, armed with the full enriched profile, converts at a higher rate. The workflow's job for Enterprise is intelligence delivery, not outreach.
 
 ---
 
-## Section 3 — AI Personalisation Layer
+## The AI Personalisation Layer
 
-The LLM does not write a generic template. It receives a structured context object and generates copy that references the visitor's specific company, their likely pain point, and the SellersCommerce feature most relevant to their business model.
+The FastAPI microservice receives the enriched visitor object and calls an LLM via OpenRouter to generate:
+- A personalised subject line (max 60 chars, no spam words)
+- A 2-3 sentence opening paragraph referencing company + relevant feature
+- A soft CTA with pre-tagged Calendly link
 
-### FastAPI Personalisation Microservice
+**Feature mapping logic** maps visitor industry to the most relevant SellersCommerce feature:
 
-```python
-# Context object passed to LLM
-{
-  "company_name": "Acme Distribution Co.",
-  "industry": "Industrial Distribution",
-  "employee_count": 340,
-  "pricing_tier_clicked": "Growth",
-  "visit_count": 2,
-  "hero_feature": "Multi-warehouse inventory sync",   # matched by feature map logic
-  "first_name": "Rajesh",
-  "title": "VP Operations"
-}
-```
+| Industry | Hero Feature Referenced |
+|----------|------------------------|
+| Industrial Distribution / Manufacturing | Dealer Portal management |
+| Fashion / Apparel | Variant management and bulk catalogue upload |
+| Electronics | Bundle pricing and warranty SKU management |
+| Food / Grocery | Expiry tracking and reorder automation |
+| E-commerce Technology | Headless commerce and API-first architecture |
+| Global / Multi-region | Multi-storefront management from a single backend |
 
-### Feature Mapping Logic
-
-The LLM prompt includes a SellersCommerce feature map. Based on the visitor's industry and company profile, the agent selects the most relevant hero feature:
-
-| Industry | Hero Feature |
-|---|---|
-| Industrial / B2B Distribution | Multi-warehouse inventory sync |
-| Fashion / Apparel | Variant management + bulk catalogue upload |
-| Electronics | Bundle pricing + warranty SKU management |
-| Food & Grocery | Expiry tracking + reorder automation |
-| General Retail | Unified order management across channels |
-
-### 3-Layer Personalisation in Every Email
-
-| Layer | What It Does |
-|---|---|
-| **Template Selection** | Structural format chosen by tier and visit type (first visit vs. return) |
-| **Dynamic Field Injection** | `{{company_name}}`, `{{pricing_tier_clicked}}`, `{{hero_feature}}`, `{{industry}}`, `{{visit_count}}`, `{{calendly_link}}` (pre-tagged with UTM source, tier, visit type) |
-| **LLM-Generated Copy** | 2–3 sentences of contextual body copy, written to sound like one person who actually researched the business before reaching out |
-
-> **Goal:** The email should not sound automated. It should sound like the one person who actually paid attention to their business before reaching out.
-
----
-
-## Section 4 — Workflow Logic & Tier-Based Routing
-
-Every branch in n8n is an explicit **IF node** — no implicit assumptions. The CRM guardrail runs before any enrichment API is called to minimise unnecessary cost.
-
-### Full Execution Sequence
-
-```
-Webhook received
-  → Filter: is this high-intent? (IF node: behaviour score threshold)
-    → No → Exit silently
-    → Yes → HubSpot guardrail check
-              → Existing customer? → Exit
-              → Opted out? → Exit (legal hard block)
-              → Outreach in last 30 days? → Exit (suppression)
-              → Pass → Clearbit enrichment
-                         → Company identified?
-                           → No → Log as unresolvable, exit
-                           → Yes → Apollo contact lookup
-                                    → Contact found?
-                                      → No → Log, exit
-                                      → Yes → Tier classification
-                                               → SME (<50 emp) → Log only
-                                               → Mid-Market → FastAPI → SendGrid (30min delay)
-                                               → Enterprise → FastAPI → SendGrid (immediate)
-                                               → All → Audit log append
-```
-
----
-
-## Section 5 — Error Handling & Scalability
-
-This workflow touches **seven external APIs**. Each is a failure point. The design principle: **fail safe, not silent.**
-
-### API Failure Handling
-
-| API | Failure Mode | Handling |
-|---|---|---|
-| Clearbit | Rate limit / no match | Retry ×2 with backoff; log as unresolvable on final fail |
-| Apollo | Rate limit / no contact | 5-second delay node between calls; queue at high volume |
-| HubSpot | Timeout | Retry ×3; exit workflow if unavailable (never skip suppression check) |
-| FastAPI / LLM | Timeout / hallucination | Deterministic fallback template used; never sends blank email |
-| SendGrid | Bounce / block | Webhook updates HubSpot contact status; suppresses future sends |
-| Google Sheets | Write failure | n8n error node fires Slack alert; execution data buffered in memory |
-
-### Anti-Spam & Domain Reputation Safeguards
-
-- **30-day global suppression** — No domain receives more than one automated outreach per 30 days. Enforced as a HubSpot contact property, checked before any enrichment API is called.
-- **SME hard block** — Companies below 50 employees are logged but never emailed.
-- **Daily send cap** — Configurable maximum daily sends via SendGrid. Overflow queued, not dropped.
-- **Domain warm-up sequence** — On first deployment, daily sends start at 50 and scale by 25% per week to prevent blacklisting.
-- **Unsubscribe hard block** — HubSpot opt-out list checked before any enrichment is called. This is a legal requirement. It is never overridden.
-
-### Scaling from 50 to 50,000 Visitors/Month
-
-| Component | Scaling Approach |
-|---|---|
-| n8n | Each webhook runs in an independent worker; n8n Cloud scales horizontally |
-| Clearbit | Enrichment results cached as HubSpot properties — same domain is never re-enriched |
-| Apollo | 5-second delay between calls; queue depth monitored via Slack |
-| LLM | FastAPI caches output per visitor profile hash for 7 days — reduces OpenRouter cost at scale |
-| Audit Log | Google Sheets → one-node swap to PostgreSQL at 10K+ monthly visits |
+**Fallback design:** If the LLM fails or returns invalid JSON, the service returns `fallback_used: true` and n8n switches to a static personalised template. Email always sends — personalisation failure never blocks delivery.
 
 ---
 
@@ -256,33 +157,138 @@ This workflow touches **seven external APIs**. Each is a failure point. The desi
 ```
 sellerscommerce-visitor-intelligence/
 │
-├── README.md                          # This document
-├── docs/
-│   ├── workflow-design.md             # Full section-by-section design spec
-│   └── presentation.pdf              # Slide deck: From Anonymous Traffic to Booked Meetings
+├── README.md                              # This document
+│
+├── fastapi/
+│   ├── main.py                            # FastAPI personalisation microservice
+│   ├── prompt_template.py                 # LLM prompt builder + feature mapping logic
+│   └── requirements.txt                   # Python dependencies
+│
+├── simulator/
+│   └── mock_visitor.py                    # Simulates JS pixel events for 5 personas
+│
 ├── n8n/
-│   └── workflow-schema.json          # n8n workflow export (structural — API keys redacted)
-└── fastapi/
-    └── personalisation-prompt.md     # LLM prompt template + feature mapping logic
+│   └── workflow_schema.json               # Full n8n workflow structure (credentials redacted)
+│
+├── data/
+│   ├── sample_enriched_visitors.json      # 5 visitor profiles post-enrichment
+│   └── sample_email_outputs.json          # Example personalised email outputs
+│
+└── docs/
+    ├── SellersCommerce_Workflow_v2_Akshay.docx   # Full 9-section architecture document
+    └── From-Anonymous-Traffic-to-Booked-Meetings.pptx  # Visual presentation
 ```
 
 ---
 
-## What I Would Build Next (With Access to SellersCommerce Stack)
+## Running Locally
 
-1. **Live pixel integration** — Connect JS pixel to real pricing page; test trigger thresholds against actual traffic data
-2. **A/B test email templates** — Run Subject Line A vs. B across the same tier; feed open/reply rates back into feature map logic
-3. **Reply detection loop** — If contact replies, automatically pause all outreach for that domain and notify the sales rep in Slack
-4. **Calendly → CRM closed loop** — When a meeting is booked, auto-create a deal in HubSpot with full enrichment context attached
-5. **Dashboard** — Real-time view of pipeline: visitors triggered → enriched → emailed → replied → booked
+### FastAPI Personalisation Service
+
+```bash
+cd fastapi
+pip install -r requirements.txt
+
+# Add your OpenRouter API key
+export OPENROUTER_API_KEY=your_key_here
+
+# Start the service
+uvicorn main:app --reload --port 8000
+
+# API docs available at:
+# http://localhost:8000/docs
+```
+
+### Test the Personalisation Endpoint
+
+```bash
+curl -X POST http://localhost:8000/personalise \
+  -H "Content-Type: application/json" \
+  -d '{
+    "first_name": "Sarah",
+    "company_name": "GlobalParts Inc.",
+    "job_title": "VP Operations",
+    "industry": "Industrial Distribution",
+    "pricing_tier_clicked": "Enterprise",
+    "trigger_type": "The Comparison Deep-Dive",
+    "visit_count": 2,
+    "visit_type": "return",
+    "company_size_band": "Enterprise",
+    "hero_feature": "Dealer Portal management",
+    "calendly_link": "https://calendly.com/sellerscommerce/demo"
+  }'
+```
+
+### Run the Visitor Simulator
+
+```bash
+cd simulator
+
+# Simulate one random visitor
+python mock_visitor.py
+
+# Simulate a specific persona
+python mock_visitor.py --persona enterprise_distributor
+
+# Fire all 5 personas
+python mock_visitor.py --all
+
+# Show enriched visitor objects (post Clearbit + Apollo)
+python mock_visitor.py --enriched
+
+# Send to real n8n webhook
+python mock_visitor.py --all --endpoint https://your-n8n-url/webhook/sellerscommerce-pricing-intent
+```
+
+---
+
+## Error Handling
+
+Every external API is a failure point. The design principle: **fail safe, not silent.**
+
+| Failure Point | Recovery | Escalation |
+|---------------|----------|------------|
+| Pixel payload malformed | Reject + log to error sheet | Slack alert if >5/hour |
+| Clearbit confidence <80% | EXIT → human review queue | Log for manual research |
+| Clearbit rate limit (429) | Retry 3x with exponential backoff | Slack alert after 3rd fail |
+| Apollo no ICP contact found | EXIT → ICP miss sheet | Review filters weekly |
+| HubSpot upsert failure | Retry 3x → manual import queue | Slack alert to ops |
+| LLM returns invalid JSON | Return fallback_used=true, static template | Log LLM failure rate |
+| SendGrid bounce | Mark invalid in HubSpot, remove from sends | Auto-flag for manual review |
+| n8n execution crash | Retry once automatically | Slack alert with execution ID |
+
+---
+
+## Anti-Spam Safeguards
+
+- **30-day global suppression** — No domain receives more than one automated outreach per 30 days
+- **SME hard block** — Companies under 50 employees are logged but never emailed
+- **Opt-out hard block** — HubSpot opt-out list checked before any enrichment API is called
+- **Daily send cap** — Configurable via SendGrid. Overflow queued, not dropped
+- **Domain warm-up** — First deployment starts at 50 sends/day, scales 25%/week
+
+---
+
+## What I Would Build Next
+
+1. **Live pixel integration** — Connect JS pixel to real pricing page; calibrate trigger thresholds against actual traffic data
+2. **A/B test email templates** — Run subject line variants across same tier; feed open/reply rates back into feature map logic
+3. **Reply detection loop** — When contact replies, automatically pause all outreach for that domain and notify sales rep in Slack
+4. **Calendly → CRM closed loop** — When meeting booked, auto-create HubSpot deal with full enrichment context attached
+5. **Real-time dashboard** — Visitors triggered → enriched → emailed → replied → booked, visible in one view
 
 ---
 
 ## About This Project
 
-This system was designed as a take-home assignment for the **Founder's Office Associate** role at SellersCommerce (March 2026). The brief: design an automation that converts pricing page visitors into booked meetings.
+Designed and built as a take-home assignment for the **Founder's Office Associate / AI Prototyper in Residence** role at SellersCommerce (March 2026).
 
-The design prioritises three things above all else: **deliverability** (your domain reputation is a business asset), **personalisation that doesn't feel automated**, and **fail-safe execution** — because a workflow that silently fails is worse than one that never ran.
+The brief: design an automation workflow that converts pricing page visitors into booked meetings.
+
+Three principles guided every design decision:
+1. **Deliverability first** — your sender domain is a business asset. The SME hard block and 30-day suppression exist to protect it.
+2. **Personalisation that doesn't feel automated** — the feature mapping logic and LLM layer exist so every email references something specific, not generic.
+3. **Fail-safe execution** — a workflow that silently fails is worse than one that never ran. Every API failure has an explicit recovery path.
 
 ---
 

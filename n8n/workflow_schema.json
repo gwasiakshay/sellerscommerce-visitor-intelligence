@@ -1,0 +1,432 @@
+{
+  "name": "SellersCommerce — Pricing Page Visitor Intelligence",
+  "description": "Monitors pricing page visitors, resolves identity via Clearbit + Apollo, routes by tier, generates personalised outreach via FastAPI LLM microservice, delivers via SendGrid.",
+  "version": "2.0",
+  "author": "Akshay Gwasikoti",
+  "note": "This is a structural schema for documentation and demonstration. API credentials have been redacted. Import into n8n and add your own API keys in the credential nodes.",
+
+  "nodes": [
+
+    {
+      "id": "node_01",
+      "name": "Pricing Page Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "position": [100, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sellerscommerce-pricing-intent",
+        "responseMode": "onReceived",
+        "responseCode": 200
+      },
+      "description": "Receives POST from JS pixel when high-intent trigger fires. Entry point for entire workflow."
+    },
+
+    {
+      "id": "node_02",
+      "name": "Validate Payload Schema",
+      "type": "n8n-nodes-base.code",
+      "position": [280, 300],
+      "parameters": {
+        "language": "javascript",
+        "code": "// Validate required fields exist and are correct types\nconst required = ['visitor_id','trigger_type','pricing_tier_clicked','time_on_pricing','scroll_depth','ip_address'];\nconst item = $input.first().json;\nfor (const field of required) {\n  if (!item[field]) throw new Error(`Missing required field: ${field}`);\n}\n// Reject bot traffic\nif (item.user_agent && item.user_agent.includes('bot')) throw new Error('Bot traffic rejected');\nreturn $input.all();"
+      },
+      "description": "Schema validation. Rejects malformed payloads and bot traffic before any API calls."
+    },
+
+    {
+      "id": "node_03",
+      "name": "High Intent Filter",
+      "type": "n8n-nodes-base.if",
+      "position": [460, 300],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.trigger_type }}",
+              "operation": "isNotEmpty"
+            }
+          ],
+          "number": [
+            {
+              "value1": "={{ $json.time_on_pricing }}",
+              "operation": "largerEqual",
+              "value2": 45
+            },
+            {
+              "value1": "={{ $json.scroll_depth }}",
+              "operation": "largerEqual",
+              "value2": 50
+            }
+          ]
+        },
+        "combineOperation": "all"
+      },
+      "description": "Only proceeds if named trigger fired AND time on page >= 45s AND scroll depth >= 50%. All three must be true."
+    },
+
+    {
+      "id": "node_04",
+      "name": "Log Low Intent Exit",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [460, 480],
+      "parameters": {
+        "operation": "append",
+        "sheetId": "{{ $env.AUDIT_SHEET_ID }}",
+        "range": "LowIntent!A:F",
+        "columns": {
+          "visitor_id": "={{ $json.visitor_id }}",
+          "trigger_type": "={{ $json.trigger_type }}",
+          "time_on_pricing": "={{ $json.time_on_pricing }}",
+          "outcome": "LOW_INTENT_EXIT",
+          "timestamp": "={{ $now }}"
+        }
+      },
+      "description": "Logs low-intent exits to audit sheet. No API cost incurred."
+    },
+
+    {
+      "id": "node_05",
+      "name": "HubSpot — Existing Customer Check",
+      "type": "n8n-nodes-base.hubspot",
+      "position": [640, 300],
+      "parameters": {
+        "operation": "search",
+        "objectType": "contacts",
+        "filterGroups": [
+          {
+            "filters": [
+              {
+                "propertyName": "ip_domain",
+                "operator": "EQ",
+                "value": "={{ $json.ip_address }}"
+              }
+            ]
+          }
+        ],
+        "properties": ["lifecycle_stage","last_outreach_date","opt_out","is_customer"]
+      },
+      "description": "Checks HubSpot BEFORE enrichment. If existing customer or active opportunity: exit. Prevents wasting API calls."
+    },
+
+    {
+      "id": "node_06",
+      "name": "CRM Guardrail — Block Existing",
+      "type": "n8n-nodes-base.if",
+      "position": [820, 300],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.is_customer }}",
+              "operation": "notEqual",
+              "value2": "true"
+            },
+            {
+              "value1": "={{ $json.opt_out }}",
+              "operation": "notEqual",
+              "value2": "true"
+            }
+          ],
+          "boolean": [
+            {
+              "value1": "={{ $json.last_outreach_date ? (Date.now() - new Date($json.last_outreach_date).getTime()) > 2592000000 : true }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        },
+        "combineOperation": "all"
+      },
+      "description": "Hard blocks: existing customer, opt-out, or outreach within last 30 days. All three must pass."
+    },
+
+    {
+      "id": "node_07",
+      "name": "Clearbit Reveal — IP to Company",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1000, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "https://reveal.clearbit.com/v1/companies/find",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "queryParameters": {
+          "ip": "={{ $json.ip_address }}"
+        },
+        "options": {
+          "timeout": 10000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "description": "Resolves corporate IP to company domain + name + industry + size. First identity signal."
+    },
+
+    {
+      "id": "node_08",
+      "name": "Confidence Threshold Check",
+      "type": "n8n-nodes-base.if",
+      "position": [1180, 300],
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.fuzzy }}",
+              "operation": "smallerEqual",
+              "value2": 0.2
+            }
+          ],
+          "string": [
+            {
+              "value1": "={{ $json.domain }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "description": "Confidence < 80% (fuzzy > 0.2) or no domain: route to human review queue. Never proceeds with bad data."
+    },
+
+    {
+      "id": "node_09",
+      "name": "Apollo.io — Find Decision Maker",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1360, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apollo.io/v1/people/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "body": {
+          "q_organization_domains": ["={{ $json.domain }}"],
+          "person_titles": [
+            "Head of E-commerce",
+            "VP Sales",
+            "VP Operations",
+            "Director of Operations",
+            "Founder",
+            "CTO",
+            "Chief Operating Officer"
+          ],
+          "contact_email_status": ["verified"],
+          "per_page": 1
+        }
+      },
+      "description": "Finds ICP-matching decision-maker at identified company. Returns verified email + title. If no match: log to ICP miss sheet, exit."
+    },
+
+    {
+      "id": "node_10",
+      "name": "Suppression Check",
+      "type": "n8n-nodes-base.if",
+      "position": [1540, 300],
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.people.length }}",
+              "operation": "largerEqual",
+              "value2": 1
+            }
+          ]
+        }
+      },
+      "description": "Apollo returned at least one ICP contact. If empty: log as ICP miss, exit."
+    },
+
+    {
+      "id": "node_11",
+      "name": "Assemble Enriched Visitor Object",
+      "type": "n8n-nodes-base.code",
+      "position": [1720, 300],
+      "parameters": {
+        "language": "javascript",
+        "code": "const visitor = $('Pricing Page Webhook').first().json;\nconst clearbit = $('Clearbit Reveal — IP to Company').first().json;\nconst apollo = $('Apollo.io — Find Decision Maker').first().json.people[0];\n\n// Feature mapping logic\nconst FEATURE_MAP = {\n  'industrial distribution': 'Dealer Portal management',\n  'manufacturing': 'Dealer Portal management',\n  'fashion': 'variant management and bulk catalogue upload',\n  'apparel': 'variant management and bulk catalogue upload',\n  'retail': 'unified order management across channels',\n  'electronics': 'bundle pricing and warranty SKU management',\n  'technology': 'headless commerce and API-first architecture',\n  'food': 'expiry tracking and reorder automation',\n  'health': 'subscription and replenishment workflows',\n};\n\nconst industry = (clearbit.category?.industry || '').toLowerCase();\nlet hero_feature = 'workflow automation and ERP integration';\nfor (const [key, val] of Object.entries(FEATURE_MAP)) {\n  if (industry.includes(key)) { hero_feature = val; break; }\n}\n\n// Company size band\nconst emp = clearbit.metrics?.employees || 0;\nconst size_band = emp > 200 ? 'Enterprise' : emp > 50 ? 'Mid-Market' : 'SME';\n\n// UTM-tagged Calendly link\nconst tier = visitor.pricing_tier_clicked.toLowerCase();\nconst visit_type = visitor.visit_count > 1 ? 'return' : 'first';\nconst calendly = `https://calendly.com/sellerscommerce/demo?utm_source=pricing-workflow&utm_tier=${tier}&utm_visit=${visit_type}`;\n\nreturn [{\n  json: {\n    first_name: apollo.first_name,\n    company_name: clearbit.name,\n    job_title: apollo.title,\n    industry: clearbit.category?.industry || 'Unknown',\n    company_size_band: size_band,\n    pricing_tier_clicked: visitor.pricing_tier_clicked,\n    trigger_type: visitor.trigger_type,\n    visit_count: visitor.visit_count,\n    visit_type: visit_type,\n    hero_feature: hero_feature,\n    calendly_link: calendly,\n    email: apollo.email,\n    linkedin_url: apollo.linkedin_url || null,\n    _meta: {\n      visitor_id: visitor.visitor_id,\n      session_id: visitor.session_id,\n      assembled_at: new Date().toISOString()\n    }\n  }\n}];"
+      },
+      "description": "Merges all data sources into single enriched_visitor object. Applies feature mapping logic. Computes size band. Builds UTM-tagged Calendly link."
+    },
+
+    {
+      "id": "node_12",
+      "name": "Tier Router",
+      "type": "n8n-nodes-base.switch",
+      "position": [1900, 300],
+      "parameters": {
+        "mode": "expression",
+        "output": "={{ $json.company_size_band }}"
+      },
+      "outputs": ["Enterprise", "Mid-Market", "SME"],
+      "description": "Routes execution based on company size band. Three outcomes: Enterprise (Slack alert), Mid-Market (auto email), SME (log only)."
+    },
+
+    {
+      "id": "node_13",
+      "name": "Enterprise — Slack Alert to Sales Rep",
+      "type": "n8n-nodes-base.slack",
+      "position": [2080, 180],
+      "parameters": {
+        "channel": "{{ $env.SLACK_SALES_CHANNEL }}",
+        "text": ":fire: *High-value pricing page visitor identified*\n\n*Company:* {{ $json.company_name }}\n*Contact:* {{ $json.first_name }}, {{ $json.job_title }}\n*Plan viewed:* {{ $json.pricing_tier_clicked }}\n*Trigger:* {{ $json.trigger_type }}\n*Visits:* {{ $json.visit_count }}\n*Hero feature match:* {{ $json.hero_feature }}\n*LinkedIn:* {{ $json.linkedin_url || 'Not found' }}\n\n_Suggested opening:_ 'I saw {{ $json.company_name }} was evaluating our {{ $json.pricing_tier_clicked }} plan...'\n\n:calendar: {{ $json.calendly_link }}"
+      },
+      "description": "Enterprise accounts get a Slack alert to sales rep — NOT an automated email. Human follow-up converts better for high-value accounts."
+    },
+
+    {
+      "id": "node_14",
+      "name": "Mid-Market — FastAPI Personalisation",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [2080, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "{{ $env.FASTAPI_URL }}/personalise",
+        "body": "={{ JSON.stringify($json) }}",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "description": "Sends enriched visitor to FastAPI microservice. Receives personalised subject + body + CTA. Falls back to static template if service fails."
+    },
+
+    {
+      "id": "node_15",
+      "name": "HubSpot — Upsert Contact",
+      "type": "n8n-nodes-base.hubspot",
+      "position": [2260, 300],
+      "parameters": {
+        "operation": "upsert",
+        "objectType": "contacts",
+        "email": "={{ $('Assemble Enriched Visitor Object').first().json.email }}",
+        "properties": {
+          "firstname": "={{ $('Assemble Enriched Visitor Object').first().json.first_name }}",
+          "company": "={{ $('Assemble Enriched Visitor Object').first().json.company_name }}",
+          "jobtitle": "={{ $('Assemble Enriched Visitor Object').first().json.job_title }}",
+          "lifecyclestage": "lead",
+          "pricing_tier_viewed": "={{ $('Assemble Enriched Visitor Object').first().json.pricing_tier_clicked }}",
+          "last_outreach_date": "={{ $now }}",
+          "outreach_trigger": "={{ $('Assemble Enriched Visitor Object').first().json.trigger_type }}"
+        }
+      },
+      "description": "Creates or updates HubSpot contact with enrichment data. Sets last_outreach_date for 30-day suppression."
+    },
+
+    {
+      "id": "node_16",
+      "name": "SendGrid — Send Email",
+      "type": "n8n-nodes-base.sendGrid",
+      "position": [2440, 300],
+      "parameters": {
+        "operation": "send",
+        "toEmail": "={{ $('Assemble Enriched Visitor Object').first().json.email }}",
+        "fromEmail": "outreach@sellerscommerce.com",
+        "fromName": "SellersCommerce",
+        "subject": "={{ $('Mid-Market — FastAPI Personalisation').first().json.subject_line }}",
+        "emailType": "html",
+        "message": "<p>Hi {{ $('Assemble Enriched Visitor Object').first().json.first_name }},</p><p>{{ $('Mid-Market — FastAPI Personalisation').first().json.opening_paragraph }}</p><p>{{ $('Mid-Market — FastAPI Personalisation').first().json.cta_line }}</p><br><p>Best,<br>The SellersCommerce Team</p>"
+      },
+      "description": "Sends personalised email via SendGrid. Subject + opening + CTA from FastAPI. Fallback_used flag logged to audit sheet."
+    },
+
+    {
+      "id": "node_17",
+      "name": "SME — Log Only",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [2080, 420],
+      "parameters": {
+        "operation": "append",
+        "sheetId": "{{ $env.AUDIT_SHEET_ID }}",
+        "range": "SMELog!A:H",
+        "columns": {
+          "company_name": "={{ $json.company_name }}",
+          "job_title": "={{ $json.job_title }}",
+          "tier_viewed": "={{ $json.pricing_tier_clicked }}",
+          "trigger": "={{ $json.trigger_type }}",
+          "outcome": "SME_LOG_ONLY",
+          "timestamp": "={{ $now }}"
+        }
+      },
+      "description": "SME visitors are logged but never emailed. Protects sender domain reputation."
+    },
+
+    {
+      "id": "node_18",
+      "name": "Audit Log — All Executions",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [2620, 300],
+      "parameters": {
+        "operation": "append",
+        "sheetId": "{{ $env.AUDIT_SHEET_ID }}",
+        "range": "AuditLog!A:K",
+        "columns": {
+          "visitor_id": "={{ $('Pricing Page Webhook').first().json.visitor_id }}",
+          "company_name": "={{ $('Assemble Enriched Visitor Object').first().json.company_name }}",
+          "contact_name": "={{ $('Assemble Enriched Visitor Object').first().json.first_name }}",
+          "tier": "={{ $('Assemble Enriched Visitor Object').first().json.company_size_band }}",
+          "trigger_type": "={{ $('Assemble Enriched Visitor Object').first().json.trigger_type }}",
+          "email_sent": "true",
+          "fallback_used": "={{ $('Mid-Market — FastAPI Personalisation').first().json.fallback_used }}",
+          "subject_line": "={{ $('Mid-Market — FastAPI Personalisation').first().json.subject_line }}",
+          "outcome": "EMAIL_SENT",
+          "timestamp": "={{ $now }}"
+        }
+      },
+      "description": "Append-only audit log. Every execution writes one row. Migrate to PostgreSQL at 10K+ monthly visits."
+    },
+
+    {
+      "id": "node_19",
+      "name": "Error Handler — Slack Alert",
+      "type": "n8n-nodes-base.slack",
+      "position": [500, 600],
+      "parameters": {
+        "channel": "{{ $env.SLACK_OPS_CHANNEL }}",
+        "text": ":red_circle: *Workflow execution failed*\n\n*Error:* {{ $json.error.message }}\n*Node:* {{ $json.error.node }}\n*Visitor ID:* {{ $json.visitor_id || 'unknown' }}\n*Timestamp:* {{ $now }}\n\nCheck audit log for details."
+      },
+      "description": "Fires on any unhandled error. Posts to ops Slack channel with error details and node name."
+    }
+
+  ],
+
+  "connections": [
+    {"from": "node_01", "to": "node_02"},
+    {"from": "node_02", "to": "node_03"},
+    {"from": "node_03", "to": "node_05", "branch": "true"},
+    {"from": "node_03", "to": "node_04", "branch": "false"},
+    {"from": "node_05", "to": "node_06"},
+    {"from": "node_06", "to": "node_07", "branch": "true"},
+    {"from": "node_07", "to": "node_08"},
+    {"from": "node_08", "to": "node_09", "branch": "true"},
+    {"from": "node_09", "to": "node_10"},
+    {"from": "node_10", "to": "node_11", "branch": "true"},
+    {"from": "node_11", "to": "node_12"},
+    {"from": "node_12", "to": "node_13", "branch": "Enterprise"},
+    {"from": "node_12", "to": "node_14", "branch": "Mid-Market"},
+    {"from": "node_12", "to": "node_17", "branch": "SME"},
+    {"from": "node_14", "to": "node_15"},
+    {"from": "node_15", "to": "node_16"},
+    {"from": "node_16", "to": "node_18"},
+    {"from": "node_13", "to": "node_18"}
+  ],
+
+  "environment_variables": {
+    "AUDIT_SHEET_ID":      "Your Google Sheets ID",
+    "SLACK_SALES_CHANNEL": "#sales-alerts",
+    "SLACK_OPS_CHANNEL":   "#ops-alerts",
+    "FASTAPI_URL":         "http://localhost:8000 or your deployed FastAPI URL"
+  },
+
+  "credentials_required": [
+    "Clearbit API Key (Basic Auth)",
+    "Apollo.io API Key (Header Auth)",
+    "HubSpot Private App Token",
+    "SendGrid API Key",
+    "OpenRouter API Key (for FastAPI service)",
+    "Google Sheets OAuth2",
+    "Slack Bot Token"
+  ]
+}
